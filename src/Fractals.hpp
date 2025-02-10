@@ -18,7 +18,6 @@
 #include<opencv2/video.hpp>
 #include <opencv2/imgcodecs.hpp>  // For imwrite function
 
-
 using namespace std;
 
 struct Complex

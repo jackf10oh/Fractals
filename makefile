@@ -1,8 +1,6 @@
--include $(OBJ_DIR)/*.d
-
 # Compilers and flags
 NVCC = nvcc  
-NVCCFLAGS = -lcudart -cuda
+NVCCFLAGS = -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
 NVCXX = nvc++
 NVCXXFLAGS = -lcudart -cuda -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
 MPICXX = mpic++
@@ -10,7 +8,7 @@ MPICXXFLAGS = -lcudart -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopenc
 
 # Directories 
 BLD_DIR = ./bld
-SRC_DIR = ./src 
+SRC_DIR = ./src
 OBJ_DIR = ./obj 
 BIN_DIR = ./bin  
 
@@ -27,9 +25,8 @@ GPU_SBATCH_SCRIPT = $(BLD_DIR)/gpi_job.sh
 MPI_SBATCH_SCRIPT = $(BLD_DIR)/mpi_job.sh
 SERIAL_SBATCH_SCRIPT = $(BLD_DIR)/serial_job.sh
 
-# Create necessary directories (if they do not exist)
-$(OBJ_DIR) $(BIN_DIR):
-	mkdir -p $@
+# Include dependency files
+-include $(OBJ_DIR)/*.d
 
 # Compile .cpp file with NVCXX for the CUDA version
 $(OBJ_DIR)/frac_cuda.o: $(SRC_DIR)/frac_cuda.cpp
@@ -45,7 +42,7 @@ $(OBJ_DIR)/frac_serial.o: $(SRC_DIR)/frac_serial.cpp
 
 # Compile Fractals.cu to fractals.o using NVCC
 $(OBJ_DIR)/fractals.o: $(SRC_DIR)/Fractals.cu
-	$(NVCC) -o $@ $(NVCCFLAGS) -I$(SRC_DIR) -MMD -MP -c $(SRC_DIR)/$<
+	$(NVCC) -o $@ $(NVCCFLAGS) -I$(SRC_DIR) -c $(SRC_DIR)/$<
 
 
 # Link object files into executables
@@ -63,7 +60,7 @@ setup_modules:
 	bash ./bld/setup_modules.sh
 
 # Default target (build everything)
-all: $(EXEC) setup_modules
+all: $(OBJ_DIR) $(BIN_DIR) $(EXEC) setup_modules
 
 submit_gpu_job:
 	@echo "Submitting a gpu job using sbatch..."
@@ -82,4 +79,3 @@ submit_serial_job:
 
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
-
