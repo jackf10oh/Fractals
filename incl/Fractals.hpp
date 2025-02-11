@@ -1,7 +1,11 @@
 #ifdef __CUDACC__
     #define CUDA_HOST_DEVICE __host__ __device__
+    #define CUDA_HOST __host__ __device__
+    #define CUDA_DEVICE __host__ __device__
 #else
-    #define CUDA_HOST_DEVICE
+    #define CUDA_HOST_DEVICE 
+    #define CUDA_HOST 
+    #define CUDA_DEVICE 
 #endif
 
 #ifndef MATRIX_HPP
@@ -76,16 +80,16 @@ class Fractal
 
 };
 
-__host__ __device__ static Complex mandelbrot_func(Complex c_init, Complex z)
+CUDA_HOST_DEVICE static Complex mandelbrot_func(Complex c_init, Complex z)
 {
   double real = z.real*z.real - z.im*z.im + c_init.real;
   double im = 2*z.real*z.im + c_init.im;
   return Complex(real,im);
 };
 
-__host__ __device__ const complexFunc_t p_mandelbrot_func = mandelbrot_func;
+CUDA_HOST_DEVICE extern const complexFunc_t p_mandelbrot_func = mandelbrot_func;
 
-__host__ __device__ static Complex julia_heart_func(Complex c_init, Complex z)
+CUDA_HOST_DEVICE static Complex julia_func(Complex c_init, Complex z)
 {
   c_init = Complex(-0.8, 0.156);
   double real = z.real*z.real - z.im*z.im + c_init.real;
@@ -93,15 +97,23 @@ __host__ __device__ static Complex julia_heart_func(Complex c_init, Complex z)
   return Complex(real,im);
 };
 
-__host__ __device__ const complexFunc_t p_julia_heart_func = julia_heart_func;
+CUDA_HOST_DEVICE extern const complexFunc_t p_julia_func = julia_func;
 
+CUDA_HOST_DEVICE static Complex burning_ship_func(Complex c_init, Complex z)
+{
+  double real = fabs(z.real*z.real) - fabs(z.im*z.im) + c_init.real;
+  double im = 2*fabs(z.real)*fabs(z.im) + c_init.im;
+  return Complex(real,im);
+};
 
-#include "Fractals.cu"
+CUDA_HOST_DEVICE extern const complexFunc_t p_burning_ship_func = burning_ship_func;
 
 // template instantiation
-template class Fractal<p_mandelbrot_func>; 
-template class Fractal<p_julia_func>;
-template class Fractal<p_burning_ship_func>;
+extern template class Fractal<p_mandelbrot_func>; 
+extern template class Fractal<p_julia_func>;
+extern template class Fractal<p_burning_ship_func>;
+
+#include "Fractals.cu"
 
 typedef Fractal<p_mandelbrot_func> Mandelbrot;
 

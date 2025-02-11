@@ -397,6 +397,13 @@ Fractal<F>& Fractal<F>::operator = (const Fractal& source)
   return *this;
 }
 
+
+
+//template instantiations
+template class Fractal<p_mandelbrot_func>; 
+template class Fractal<p_julia_func>;
+template class Fractal<p_burning_ship_func>;
+
 #endif
 
 

@@ -4,9 +4,6 @@
 #include<tuple>
 #include<vector>
 #include "Fractals.hpp"
-#include <opencv2/opencv.hpp>
-#include<opencv2/video.hpp>
-#include <opencv2/imgcodecs.hpp>  // For imwrite function
 
 using namespace std;
 
@@ -46,10 +43,6 @@ int main(int argc, char** argv)
 
   printf("calcuating... \n");
   A.CalculateCuda();
-
-  // printf("saving to file!\n");
-  // A.ItersToIMG("julia.ppm");
-  // A.ItersToCSV("julia.csv");
   
   cv::Mat frame;
   cv::VideoWriter writer;
@@ -71,3 +64,6 @@ int main(int argc, char** argv)
 
   return 0;
 };
+
+
+

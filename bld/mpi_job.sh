@@ -10,9 +10,11 @@
 # Load any necessary modules (e.g., for software packages)
 module load nvhpc/22.9
 module load cuda/11.7.1
+module load openmpi/4.0.5-nvhpc22.9
 # module load opencv/4.2.0
 # module unload opencv/4.2.0 // might need to do this. idk?
-module load openmpi/4.0.5-nvhpc22.9
+
+make $(BIN_DIR)/frac_mpi
 
 # run executable
-time $(BIN_DIR)/frac_mpi
+time mpirun -n 5 $(BIN_DIR)/frac_mpi

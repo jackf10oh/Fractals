@@ -1,3 +1,5 @@
-./bin/*
+bin/*
+obj/*
+*.o
 *.ppm
 *.avi

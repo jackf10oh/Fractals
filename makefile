@@ -1,81 +1,120 @@
-# Compilers and flags
-NVCC = nvcc  
-NVCCFLAGS = -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
-NVCXX = nvc++
-NVCXXFLAGS = -lcudart -cuda -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
-MPICXX = mpic++
-MPICXXFLAGS = -lcudart -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
+###########################################################
 
-# Directories 
-BLD_DIR = ./bld
-SRC_DIR = ./src
-OBJ_DIR = ./obj 
-BIN_DIR = ./bin  
+## USER SPECIFIC DIRECTORIES ##
 
-# Source Files
-SRC = $(SRC_DIR)/frac_serial.cpp $(SRC_DIR)/frac_mpi.cpp $(SRC_DIR)/frac_cuda.cpp
-CUDA_SRC = $(SRC_DIR)/Fractals.cu
+# CUDA directory:
+CUDA_ROOT_DIR=opt/packages/cuda/v11.7.1
 
-# Object Files
-OBJ = $(OBJ_DIR)/frac_serial.o $(OBJ_DIR)/frac_mpi.o $(OBJ_DIR)/frac_cuda.o $(OBJ_DIR)/fractals.o
-EXEC = $(BIN_DIR)/frac_serial $(BIN_DIR)/frac_mpi $(BIN_DIR)/frac_cuda
+##########################################################
+
+## NVCC COMPILER OPTIONS ##
+
+NVCC=nvcc
+NVCC_FLAGS= 
+NVCC_LIBS= -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio -lcudart 
+# -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
+
+# CUDA library directory:
+CUDA_LIB_DIR= -L$(CUDA_ROOT_DIR)/lib64
+# CUDA include directory:
+CUDA_INC_DIR= -I$(CUDA_ROOT_DIR)/include
+# CUDA linking libraries:
+CUDA_LINK_LIBS= -lcudart
+
+##########################################################
+
+## NVCXX COMPILER OPTIONS:
+NVCXX=nvc++
+NVCXX_FLAGS =
+NVCXX_LIBS = $(CUDA_LIB_DIR) -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio $(CUDA_LINK_LIBS)
+
+##########################################################
+
+## NVCXX COMPILER OPTIONS:
+MPICXX=mpic++
+MPICXX_FLAGS =
+MPICXX_LIBS = $(CUDA_LIB_DIR) -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio $(CUDA_LINK_LIBS)
+
+##########################################################
+
+## Project file structure ##
+
+# Include header file diretory:
+INC_DIR := incl
+# Source file directory:
+SRC_DIR := src
+# Build files directory // slurm batch files
+BLD_DIR := bld
+# Object file directory:
+OBJ_DIR := obj
+# Object file directory:
+BIN_DIR := bin
+
+# make directories if they don't exist already
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+##########################################################
+
+## Make variables ##
+
+# Target executable name:
+EXE = $(BIN_DIR)/frac_cuda $(BIN_DIR)/frac_serial $(BIN_DIR)/frac_mpi
+
+# Object files:
+OBJS = $(OBJ_DIR)/Fractals.o $(OBJ_DIR)/frac_cuda.o $(OBJ_DIR)/frac_serial.o # $(OBJ_DIR)/frac_mpi.o
 
 # Slurm SBATCH job scripts 
 GPU_SBATCH_SCRIPT = $(BLD_DIR)/gpi_job.sh
 MPI_SBATCH_SCRIPT = $(BLD_DIR)/mpi_job.sh
 SERIAL_SBATCH_SCRIPT = $(BLD_DIR)/serial_job.sh
+ 
+##########################################################
 
-# Include dependency files
--include $(OBJ_DIR)/*.d
+## Compile ##
 
-# Compile .cpp file with NVCXX for the CUDA version
-$(OBJ_DIR)/frac_cuda.o: $(SRC_DIR)/frac_cuda.cpp
-	$(NVCXX) -o $@ $(NVCXXFLAGS) -I$(SRC_DIR) -MMD -MP -c $(SRC_DIR)/$<
+# Main target: builds all
+all: $(OBJ_DIR) $(BIN_DIR) $(OBJS) $(EXE)
 
-# Compile .cpp file with MPICXX for the MPI version
-$(OBJ_DIR)/frac_mpi.o: $(SRC_DIR)/frac_mpi.cpp
-	$(MPICXX) -o $@ $(MPICXXFLAGS) -c -I$(SRC_DIR) -MMD -MP $(SRC_DIR)/$<
+# MPI Link .o files to executable
+$(BIN_DIR)/frac_mpi : $(OBJ_DIR)/frac_mpi.o $(OBJ_DIR)/Fractals.o
+	$(MPICXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda $< 
 
-# Compile .cpp file with NVCXX for the serial version
-$(OBJ_DIR)/frac_serial.o: $(SRC_DIR)/frac_serial.cpp
-	$(NVCXX) -o $@ $(NVCXXFLAGS) -c -I$(SRC_DIR) -MMD -MP $(SRC_DIR)/$<
+# Link .o files to executable
+$(BIN_DIR)/% : $(OBJ_DIR)/%.o $(OBJ_DIR)/Fractals.o
+	$(NVCXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda $< 
 
-# Compile Fractals.cu to fractals.o using NVCC
-$(OBJ_DIR)/fractals.o: $(SRC_DIR)/Fractals.cu
-	$(NVCC) -o $@ $(NVCCFLAGS) -I$(SRC_DIR) -c $(SRC_DIR)/$<
+# MPI Compile C++ source files to object files:
+$(OBJ_DIR)/frac_mpi.o : $(SRC_DIR)/frac_mpi.cpp $(INC_DIR)/Fractals.hpp
+	$(MPICXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda -c $< 
 
+# Compile C++ source files to object files:
+$(OBJ_DIR)/%.o : $(SRC_DIR)/%.cpp $(INC_DIR)/Fractals.hpp
+	$(NVCXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda -c $< 
 
-# Link object files into executables
-$(BIN_DIR)/frac_serial: $(OBJ_DIR)/frac_serial.o $(OBJ_DIR)/fractals.o
-	$(NVCXX) -o $@ $(NVCXXFLAGS) $^ 
-
-$(BIN_DIR)/frac_mpi: $(OBJ_DIR)/frac_mpi.o $(OBJ_DIR)/fractals.o
-	$(MPICXX) -o $@ $(MPICXXFLAGS) $^ 
-
-$(BIN_DIR)/frac_cuda: $(OBJ_DIR)/frac_cuda.o $(OBJ_DIR)/fractals.o
-	$(NVCXX) -o $@ $(NVCXXFLAGS) $^ 
-
-# Target to load necessary modules
-setup_modules:
-	bash ./bld/setup_modules.sh
-
-# Default target (build everything)
-all: $(OBJ_DIR) $(BIN_DIR) $(EXEC) setup_modules
+# Compile .cu to .o using NVCC
+$(OBJ_DIR)/Fractals.o: $(SRC_DIR)/Fractals.cu $(INC_DIR)/Fractals.hpp
+	$(NVCC) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(NVCC_LIBS) -c $<
 
 submit_gpu_job:
 	@echo "Submitting a gpu job using sbatch..."
-	$(MAKE) $(BIN_DIR)/frac_cuda
-	$(shell sbatch $(GPU_SBATCH_SCRIPT))
+	make $(BIN_DIR)/frac_cuda
+	@sbatch --export=BIN_DIR=$(BIN_DIR) $(GPU_SBATCH_SCRIPT)
 
 submit_mpi_job:
 	@echo "Submitting an mpi job using sbatch..."
-	$(MAKE) $(BIN_DIR)/frac_mpi
-	$(shell sbatch $(MPI_SBATCH_SCRIPT))
+	make $(BIN_DIR)/frac_mpi
+	@sbatch --export=BIN_DIR=$(BIN_DIR) $(MPI_SBATCH_SCRIPT)
 
 submit_serial_job:
 	@echo "Submitting a serial job using sbatch..."
-	$(MAKE) $(BIN_DIR)/frac_serial
-	$(shell sbatch $(SERIAL_SBATCH_SCRIPT))
+	make $(BIN_DIR)/frac_serial
+	@sbatch --export=BIN_DIR=$(BIN_DIR) $(SERIAL_SBATCH_SCRIPT)
 
+
+# Clean objects in object directory.
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	$(RM) bin/* *.o obj/* *.o $(EXE)

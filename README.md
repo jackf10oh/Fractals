@@ -1,17 +1,23 @@
 # Fractals
-A repository for various C++ files using CUDA and MPI to calculate fractals.
+A repository for using CUDA and MPI to calculate fractals in C++.
 
-Fractals folder
-
-contains various scripts to create fractals. E.g. mandelbrot, burning ship, etc
-goal is to use mpi, cuda, openmp, etc to speed up computations a lot.
+Contains various scripts to create fractals. E.g. Mandelbrot, Julia, etc
+goal is to use to speed up computations a lot on Bridges-2 supercomputer.
 
 - Fractal.hpp  
-it is an abstract base class for future classes to define custom recursive functions
-it has constructors that take the initial coors of the image and the number of rows and columns
+it is a template class for use with complexFunc_t template argments to define custom recursive functions
+it has constructors that take the initial coords of the image and the number of rows and columns
+and how many iterations to perform at each point.
 
-- Mandelbrot.hpp
-derived from Fractal abc. uses f(z) = z**2 + c 
+- class Mandelbrot
+Template instantiation of Fractal. uses f(zn+1) = (zn)**2 + c 
+where c=z0 is a point in the complex plane
 
-- BurningShip.hpp
-derived from Fractal abc. uses f(z) = (|Re(z)| + |Im(z)|) ** 2 + c  
+- class Julia
+Template instantiation of Fractal. uses f(z) = (|Re(z)| + |Im(z)|) ** 2 + c  
+like Mandelbrot set, but c is set constant and used for every point z 
+in the complex plane.
+
+- class BurningShip
+Template instantiation of Fractal. uses f(z) = (|Re(z)| + |Im(z)|) ** 2 + c  
+like Mandelbrot but uses absolute values. Commonly viewed upside.
