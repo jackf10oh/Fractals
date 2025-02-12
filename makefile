@@ -82,7 +82,7 @@ EXE = $(BIN_DIR)/frac_cuda $(BIN_DIR)/frac_serial $(BIN_DIR)/frac_mpi
 OBJS = $(OBJ_DIR)/Fractals.o $(OBJ_DIR)/frac_cuda.o $(OBJ_DIR)/frac_serial.o # $(OBJ_DIR)/frac_mpi.o
 
 # Slurm SBATCH job scripts 
-GPU_SBATCH_SCRIPT = $(BLD_DIR)/gpi_job.sh
+GPU_SBATCH_SCRIPT = $(BLD_DIR)/gpu_job.sh
 MPI_SBATCH_SCRIPT = $(BLD_DIR)/mpi_job.sh
 SERIAL_SBATCH_SCRIPT = $(BLD_DIR)/serial_job.sh
  

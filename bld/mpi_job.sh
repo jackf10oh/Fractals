@@ -4,7 +4,7 @@
 #SBATCH --error=out/mpi_job_error.txt             # Error file for stderr
 #SBATCH -N 5                                  # Number of CPU cores per task
 #SBATCH -p GPU                                # Partition (queue) to submit to
-#SBATCH -gres=gpu:v100-16:8                   # general resource = gpu : gpu_type: gpus_per_core
+#SBATCH --gres=gpu:v100-16:8                   # general resource = gpu : gpu_type: gpus_per_core
 #SBATCH -t 00:05:00                           # Max runtime (hh:mm:ss)
 
 # Load any necessary modules (e.g., for software packages)

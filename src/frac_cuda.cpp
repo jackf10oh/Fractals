@@ -33,7 +33,7 @@ void print_arr(vector<vector<int>> iter_array)
 
 int main(int argc, char** argv)
 {
-  tuple<int,int> dims = make_tuple(1020,1980); // rows, cols of frame
+  tuple<int,int> dims = make_tuple(1080,1920); // rows, cols of frame
   Complex p1(-2,2), p2(2,-2);
   Mandelbrot A(p1,p2,dims,9999); // iterations to perform
   A.Center(Complex(
@@ -50,6 +50,11 @@ int main(int argc, char** argv)
   int fourcc = cv::VideoWriter::fourcc('I', 'Y', 'U', 'V'); // Specify the codec and create VideoWriter object
   writer.open(filename, fourcc, fps,cv::Size(get<1>(dims),get<0>(dims))); // open video writer
 
+  if (!writer.isOpened()) {
+    cerr << "Error opening video writer!" << endl;
+    return -1;
+  }
+  
   printf("calcuating... \n");
   A.CalculateCudaGPUs();
   A.ItersToIMG("out/frame_1_cuda.ppm"); // output of first frame
@@ -66,6 +71,7 @@ int main(int argc, char** argv)
   writer.release();
 
   return 0;
+
 };
 
 

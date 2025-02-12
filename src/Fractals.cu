@@ -350,7 +350,6 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
                                               radius, 
                                               val_array_d[gpu]+stream_offset, 
                                               stream_num_elems);
-      cudaDeviceSynchronize();
       checkLastError();
   
       cudaMemcpyAsync(val_array_h+gpu_offset+stream_offset, 
@@ -364,7 +363,6 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
                       stream_num_elems*sizeof(int), 
                       cudaMemcpyDeviceToHost,
                       streams_arr[gpu][stream]);
-      cudaDeviceSynchronize();
       checkLastError();
     }
   }
@@ -394,16 +392,20 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
 
   // free memory
   if(verbose) cout<<"freeing memory"<<endl;
-  cudaFree(val_array_h);
-  cudaFree(iter_array_h);
+  cudaFreeHost(val_array_h);
+  cudaFreeHost(iter_array_h);
   for(int gpu=0; gpu<num_gpus; gpu++)
   {
+    cudaSetDevice(gpu);
     cudaFree(val_array_d[gpu]);
     cudaFree(iter_array_d[gpu]);
   }
   
   // end of function
   if(verbose) cout<<"end of function"<<endl;
+  checkLastError();
+  return;
+
 };
 
 template<complexFunc_t F>

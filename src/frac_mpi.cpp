@@ -74,6 +74,11 @@ int main(int argc, char** argv)
   int fourcc = cv::VideoWriter::fourcc('I', 'Y', 'U', 'V'); // Specify the codec and create VideoWriter object
   writer.open(filename, fourcc, fps, cv::Size(cols,rows));
 
+  if (!writer.isOpened()) {
+    cerr << "Error opening video writer!" << endl;
+    return -1;
+  }
+
   //setup 1d and 2d buffers for iters array
   vector<vector<int>> buff = my_frac->GetIterArr();
   vector<int> send_buff(buff.size()*buff[0].size());
@@ -91,6 +96,8 @@ int main(int argc, char** argv)
     {
       my_frac->CalculateCudaGPUs(); // utilizes all gpus available
       buff=my_frac->GetIterArr();
+      // non blocking 
+      if(chunk>0) MPI_Wait(&send_request, MPI_STATUS_IGNORE);
       for(int i=0; i<rows; i++) // manually load send_buffer
       {
         for(int j=0; j<cols;  j++)
@@ -98,8 +105,6 @@ int main(int argc, char** argv)
           send_buff[i*cols + j]=buff[i][j];
         }
       }
-      // non blocking 
-      if(chunk>0) MPI_Wait(&send_request, MPI_STATUS_IGNORE);
       MPI_Isend(send_buff.data(),rows*cols,MPI_INT, 0, my_PE_num, MPI_COMM_WORLD, &send_request);
       // blocking
       // MPI_Send(send_buff.data(),rows*cols,MPI_INT, 0, my_PE_num, MPI_COMM_WORLD);
