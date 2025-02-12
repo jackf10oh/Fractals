@@ -1,8 +1,8 @@
 # Fractals
 A repository for using CUDA and MPI to calculate fractals in C++.
 
-Contains various scripts to create fractals. E.g. Mandelbrot, Julia, etc
-goal is to use to speed up computations a lot on Bridges-2 supercomputer.
+Contains various scripts to create fractals. E.g. Mandelbrot, Julia, etc.
+The goal is to use to speed up computations a lot on Bridges-2 supercomputer.
 
 - Fractal.hpp  
 it is a template class for use with complexFunc_t template argments to define custom recursive functions
@@ -21,3 +21,20 @@ in the complex plane.
 - class BurningShip
 Template instantiation of Fractal. uses f(z) = (|Re(z)| + |Im(z)|) ** 2 + c  
 like Mandelbrot but uses absolute values. Commonly viewed upside.
+
+
+
+
+
+- sources...
+
+for makefile
+https://github.com/TravisWThompson1/Makefile_Example_CUDA_CPP_To_Executable
+
+for Mandelbrot set coordinate
+https://commons.wikimedia.org/wiki/User:Wolfgangbeyer
+https://www.dhushara.com/DarkHeart/DarkHeart.htm
+https://hypertextbook.com/chaos/mandelbrot/
+
+for function pointers in cuda
+https://leimao.github.io/blog/Pass-Function-Pointers-to-Kernels-CUDA/

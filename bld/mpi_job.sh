@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mpi_fractal_job            # Job name
-#SBATCH --output=mpi_job_output.txt           # Output file for stdout
-#SBATCH --error=mpi_job_error.txt             # Error file for stderr
+#SBATCH --output=out/mpi_job_output.txt           # Output file for stdout
+#SBATCH --error=out/mpi_job_error.txt             # Error file for stderr
 #SBATCH -N 5                                  # Number of CPU cores per task
 #SBATCH -p GPU                                # Partition (queue) to submit to
 #SBATCH -gres=gpu:v100-16:8                   # general resource = gpu : gpu_type: gpus_per_core
@@ -13,8 +13,6 @@ module load cuda/11.7.1
 module load openmpi/4.0.5-nvhpc22.9
 # module load opencv/4.2.0
 # module unload opencv/4.2.0 // might need to do this. idk?
-
-make $(BIN_DIR)/frac_mpi
 
 # run executable
 time mpirun -n 5 $(BIN_DIR)/frac_mpi

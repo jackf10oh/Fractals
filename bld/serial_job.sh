@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=serial_fractal_program   # Job name
-#SBATCH --output=serial_job_output.txt      # Output file for stdout
-#SBATCH --error=serial_job_error.txt        # Error file for stderr
+#SBATCH --output=out/serial_job_output.txt      # Output file for stdout
+#SBATCH --error=out/serial_job_error.txt        # Error file for stderr
 #SBATCH -N 1                                # Number of CPU cores per task
 #SBATCH -p RM                               # Partition (queue) to submit to
 #SBATCH -t 01:15:00                         # Max runtime (hh:mm:ss)

@@ -1,3 +1,12 @@
+######################################
+
+# you may need to run the following from the command line
+# to get this make file to work...
+
+# module load nvhpc/22.9
+# module load cuda/11.7.1
+# module load openmpi/4.0.5-nvhpc22.9
+
 ###########################################################
 
 ## USER SPECIFIC DIRECTORIES ##
@@ -47,12 +56,17 @@ SRC_DIR := src
 BLD_DIR := bld
 # Object file directory:
 OBJ_DIR := obj
+# Output file directory:
+OUT_DIR := out
 # Object file directory:
 BIN_DIR := bin
 
 # make directories if they don't exist already
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
+
+$(OUT_DIR):
+	mkdir -p $(OUT_DIR)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -114,7 +128,6 @@ submit_serial_job:
 	make $(BIN_DIR)/frac_serial
 	@sbatch --export=BIN_DIR=$(BIN_DIR) $(SERIAL_SBATCH_SCRIPT)
 
-
 # Clean objects in object directory.
 clean:
-	$(RM) bin/* *.o obj/* *.o $(EXE)
+	$(RM) bin/* obj/* *.o out/* *.avi *.ppm *.txt $(EXE)

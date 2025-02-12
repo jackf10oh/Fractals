@@ -4,8 +4,12 @@
 #include "Fractals.hpp"
 #include<math.h>
 
-// double modulus2(const tuple<double,double> z); // returns modulus squared
-__host__ __device__ inline double modulus2(Complex z){return z.real*z.real + z.im*z.im;}; // returns modulus squared
+inline void checkLastError()
+{
+  cudaError_t err;
+  err=cudaGetLastError();
+  if(err!=cudaSuccess) printf("error from cuda:%s\n", cudaGetErrorString(err));
+};
 
 template<complexFunc_t F>
 __global__ void iteration_kernel(int* iter_array, int max_iters, double radius, Complex* val_array, int num_elems)
@@ -15,22 +19,26 @@ __global__ void iteration_kernel(int* iter_array, int max_iters, double radius, 
   for(int i=idx; i<num_elems; i+=stride)
   {
     iter_array[i]=0;
+
     Complex c_init=val_array[i], z=val_array[i]; // complex numbers c,z = a+ib
     int iter=1; // leave iter_array as 0 if recursion doesn't explode.
     do
     {
-      z = (*F)(c_init,z); // assignment handled in my_recursive
-      // if recursion > radius of fractal
-      if(modulus2(z) >= radius*radius) 
+      // if current val > radius of fractal
+      if(modulus2(z) >= (radius*radius)) 
       {
         val_array[i]=z; // copy z back to val_array
         iter_array[i]=iter; // update iter_array to nonzero interger
+        break;
       }; 
-      iter++;
+      z = (*F)(c_init,z); // assignment handled in my_recursive
+      ++iter;
     }
-    while(modulus2(z) < radius*radius && iter<max_iters); // loop while inside radius and iterations remain
+    while(iter<max_iters); // loop while inside radius and iterations remain
   }
 };
+
+
 
 //constructors
 template<complexFunc_t F>
@@ -157,7 +165,6 @@ void Fractal<F>::CalculateCuda(bool verbose) // iterate on each matrix entry.
   if(verbose) if(verbose)cout<<"kernel running"<<endl;
   iteration_kernel<F><<<32,256>>>(iter_array_d, num_iters, radius, val_array_d, num_elems);
   cudaDeviceSynchronize();
-  // checkLastError();
 
   //copy back to host buffer, unpack into val-array
   if(verbose) cout<<"copy back to host"<<endl;
@@ -178,6 +185,222 @@ void Fractal<F>::CalculateCuda(bool verbose) // iterate on each matrix entry.
   delete[] iter_array_h;
   cudaFree(val_array_d);
   cudaFree(iter_array_d);
+  
+  // end of function
+  if(verbose) cout<<"end of function"<<endl;
+};
+
+template<complexFunc_t F>
+void Fractal<F>::CalculateCudaStreams(bool verbose) // iterate on each matrix entry.
+{
+  // host memory 
+  int num_elems = nRows*nCols;
+  if(verbose) cout<<"host memory"<<endl;
+  Complex* val_array_h = new Complex[num_elems];
+  int* iter_array_h = new int[num_elems];
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array_h[i*nCols+j]=val_array[i][j];
+    }
+  }
+
+  int num_gpus = 0;
+  cudaGetDeviceCount(&num_gpus);
+  if(num_gpus==0){Fractal<F>::Calculate(verbose); return;};
+
+  // device memory 
+  if(verbose) cout<<"device memory"<<endl;
+  Complex* val_array_d;
+  int* iter_array_d;
+  cudaMalloc(&val_array_d, num_elems*sizeof(Complex));
+  cudaMalloc(&iter_array_d, num_elems*sizeof(int));
+
+  int num_streams = 20;
+  int stream_chunk_size = sdiv(num_elems,num_streams);
+
+  cudaStream_t streams_arr[num_streams];
+  for(int i=0; i<num_streams; i++) cudaStreamCreate(&streams_arr[i]);
+
+  if(verbose) cout << "launching copy/compute in concurrent streams" << endl;
+  for(int stream=0; stream<num_streams; stream++)
+  {
+    int stream_offset = stream*stream_chunk_size;
+    int stream_num_elems = min(stream_chunk_size, num_elems-stream_offset);
+    // copy compute copy back in stream
+    cudaMemcpyAsync(val_array_d+stream_offset,
+                    val_array_h+stream_offset, 
+                    stream_num_elems*sizeof(Complex),
+                    cudaMemcpyHostToDevice,
+                    streams_arr[stream]);
+
+    iteration_kernel<F><<<32,256,0,streams_arr[stream]>>>(iter_array_d+stream_offset, 
+                                             num_iters, 
+                                             radius, 
+                                             val_array_d+stream_offset, 
+                                             stream_num_elems);
+
+    cudaMemcpyAsync(val_array_h+stream_offset, 
+                    val_array_d+stream_offset, 
+                    stream_num_elems*sizeof(Complex), 
+                    cudaMemcpyDeviceToHost,
+                    streams_arr[stream]);
+
+    cudaMemcpyAsync(iter_array_h+stream_offset, 
+                    iter_array_d+stream_offset, 
+                    stream_num_elems*sizeof(int), 
+                    cudaMemcpyDeviceToHost,
+                    streams_arr[stream]);
+  }
+  
+  cudaDeviceSynchronize();
+  for(int i=0; i<num_streams; i++) cudaStreamDestroy(streams_arr[i]);
+
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array[i][j] = val_array_h[i*nCols+j];
+      iter_array[i][j] = iter_array_h[i*nCols+j];
+    }
+  }
+
+  // free memory
+  if(verbose) cout<<"freeing memory"<<endl;
+  delete[] val_array_h;
+  delete[] iter_array_h;
+  cudaFree(val_array_d);
+  cudaFree(iter_array_d);
+  
+  // end of function
+  if(verbose) cout<<"end of function"<<endl;
+};
+
+template<complexFunc_t F>
+void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry.
+{
+  // host memory 
+  int num_elems = nRows*nCols;
+  if(verbose) cout<<"host memory"<<endl;
+  Complex* val_array_h;
+  int* iter_array_h;
+  cudaMallocHost(&val_array_h, num_elems*sizeof(Complex));
+  cudaMallocHost(&iter_array_h, num_elems*sizeof(int));
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array_h[i*nCols+j]=val_array[i][j];
+    }
+  }
+
+  int num_gpus = 0;
+  cudaGetDeviceCount(&num_gpus);
+  if(num_gpus==0){cout<<"No GPUs found."<<endl; Fractal<F>::Calculate(verbose);return;};
+  if(num_gpus==1){cout<<"1 GPU found."<<endl; Fractal<F>::CalculateCudaStreams(verbose); return;};
+  int gpu_chunk_size = sdiv(num_elems, num_gpus);
+
+  // device memory 
+  if(verbose) cout<<"device memory"<<endl;
+  Complex* val_array_d[num_gpus];
+  int* iter_array_d[num_gpus];
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaSetDevice(gpu);
+    int gpu_num_elems = min(gpu_chunk_size, num_elems-gpu*gpu_chunk_size);
+    cudaMalloc(&val_array_d[gpu], gpu_num_elems*sizeof(Complex));
+    cudaMalloc(&iter_array_d[gpu], gpu_num_elems*sizeof(int));
+  }
+
+  int num_streams = 20;
+  int stream_chunk_size = sdiv(gpu_chunk_size,num_streams);
+
+  cudaStream_t streams_arr[num_gpus][num_streams];
+
+  for(int i=0; i<num_gpus; i++) // initialize stream
+  {
+    cudaSetDevice(i);
+    for(int j=0; j<num_streams; j++) // init cuda streams
+    {
+      cudaStreamCreate(&streams_arr[i][j]);
+    };
+  };
+
+  if(verbose) cout << "launching copy/compute in concurrent streams on " << num_gpus << " GPUs." << endl;
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaSetDevice(gpu);
+    int gpu_offset=gpu*gpu_chunk_size;
+    int gpu_num_elems = min(gpu_chunk_size, num_elems-gpu_offset);
+
+    for(int stream=0; stream<num_streams; stream++) // copy compute overlap
+    {
+      int stream_offset = stream*stream_chunk_size;
+      int stream_num_elems = min(stream_chunk_size, gpu_num_elems-stream_offset);
+      // copy compute copy back in stream
+      cudaMemcpyAsync(val_array_d[gpu]+stream_offset,
+                      val_array_h+gpu_offset+stream_offset, 
+                      stream_num_elems*sizeof(Complex),
+                      cudaMemcpyHostToDevice,
+                      streams_arr[gpu][stream]);
+  
+      iteration_kernel<F><<<32,256,0,streams_arr[gpu][stream]>>>(iter_array_d[gpu]+stream_offset, 
+                                              num_iters, 
+                                              radius, 
+                                              val_array_d[gpu]+stream_offset, 
+                                              stream_num_elems);
+      cudaDeviceSynchronize();
+      checkLastError();
+  
+      cudaMemcpyAsync(val_array_h+gpu_offset+stream_offset, 
+                      val_array_d[gpu]+stream_offset, 
+                      stream_num_elems*sizeof(Complex), 
+                      cudaMemcpyDeviceToHost,
+                      streams_arr[gpu][stream]);
+        
+      cudaMemcpyAsync(iter_array_h+gpu_offset+stream_offset, 
+                      iter_array_d[gpu]+stream_offset, 
+                      stream_num_elems*sizeof(int), 
+                      cudaMemcpyDeviceToHost,
+                      streams_arr[gpu][stream]);
+      cudaDeviceSynchronize();
+      checkLastError();
+    }
+  }
+  for(int gpu=0; gpu<num_gpus; gpu++) // synchronize all gpus
+  {
+    cudaSetDevice(gpu);
+    cudaDeviceSynchronize();
+  };
+
+  for(int i=0; i<num_gpus; i++) // destroy all streams
+  {
+    for(int j=0; j<num_streams; j++)
+    {
+      cudaSetDevice(i);
+      cudaStreamDestroy(streams_arr[i][j]);
+    }
+  }
+
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array[i][j] = val_array_h[i*nCols+j];
+      iter_array[i][j] = iter_array_h[i*nCols+j];
+    }
+  }
+
+  // free memory
+  if(verbose) cout<<"freeing memory"<<endl;
+  cudaFree(val_array_h);
+  cudaFree(iter_array_h);
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaFree(val_array_d[gpu]);
+    cudaFree(iter_array_d[gpu]);
+  }
   
   // end of function
   if(verbose) cout<<"end of function"<<endl;
@@ -246,21 +469,23 @@ void Fractal<F>::Zoom(double scale) // reset the coors (x1,y1), (x2,y2) to be sm
   }
 };
 
+
+
 // getters
 template<complexFunc_t F>
-vector<vector<Complex>> Fractal<F>::GetValArr() // get iter_array from member data.
+vector<vector<Complex>> Fractal<F>::GetValArr() const// get iter_array from member data.
 {
   return val_array;
 };
 
 template<complexFunc_t F>
-vector<vector<int>> Fractal<F>::GetIterArr() // get iter_array from member data.
+vector<vector<int>> Fractal<F>::GetIterArr() const// get iter_array from member data.
 {
   return iter_array;
 };
 
 template<complexFunc_t F>
-void Fractal<F>::ValToCSV(string fname) // write iters_array to a csv file
+void Fractal<F>::ValToCSV(string fname) const// write iters_array to a csv file
 {
   ofstream out(fname);
   if(out.is_open())
@@ -283,7 +508,7 @@ void Fractal<F>::ValToCSV(string fname) // write iters_array to a csv file
 };
 
 template<complexFunc_t F>
-void Fractal<F>::ItersToCSV(string fname) // write iters_array to a csv file
+void Fractal<F>::ItersToCSV(string fname) const// write iters_array to a csv file
 {
   ofstream out(fname);
   if(out.is_open())
@@ -306,7 +531,7 @@ void Fractal<F>::ItersToCSV(string fname) // write iters_array to a csv file
 };
 
 template<complexFunc_t F>
-void Fractal<F>::ItersToIMG(string fname) // write iters_array to a csv file
+void Fractal<F>::ItersToIMG(string fname) const// write iters_array to a csv file
 {
   ofstream out(fname);
   if(out.is_open())
@@ -348,7 +573,7 @@ void Fractal<F>::ItersToIMG(string fname) // write iters_array to a csv file
 };
 
 template<complexFunc_t F>
-cv::Mat Fractal<F>::ItersToFrame() // write to a opencv cv::Mat
+cv::Mat Fractal<F>::ItersToFrame() const// write to a opencv cv::Mat
 {
   cv::Mat frame(nRows, nCols, CV_8UC3);
   for(int i=0; i<nRows; i++)
@@ -396,13 +621,6 @@ Fractal<F>& Fractal<F>::operator = (const Fractal& source)
   iter_array=source.iter_array; // array that counts how many iterations for a pixel to explode
   return *this;
 }
-
-
-
-//template instantiations
-template class Fractal<p_mandelbrot_func>; 
-template class Fractal<p_julia_func>;
-template class Fractal<p_burning_ship_func>;
 
 #endif
 

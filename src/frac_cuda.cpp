@@ -33,20 +33,40 @@ void print_arr(vector<vector<int>> iter_array)
 
 int main(int argc, char** argv)
 {
-  tuple<int,int> dims = make_tuple(1080,1080);
+  tuple<int,int> dims = make_tuple(1020,1980); // rows, cols of frame
   Complex p1(-2,2), p2(2,-2);
-  Mandelbrot A(p1,p2,dims,99);
-  // print_arr(A.GetValArr());
+  Mandelbrot A(p1,p2,dims,9999); // iterations to perform
+  A.Center(Complex(
+    -0.743643887037151, 0.131825904205330 // interesting coordinate...
+  ));
 
+  // setup cv video writer
+  int video_length = 1*60; // vid length in second
+  int fps=30; // vid frames per second
+  double zoom_speed = 0.95; // 0 < zoom_seed < 1
+
+  cv::VideoWriter writer;
+  string filename = "out/mandelbrot_zoom_cuda.avi"; // output file video
+  int fourcc = cv::VideoWriter::fourcc('I', 'Y', 'U', 'V'); // Specify the codec and create VideoWriter object
+  writer.open(filename, fourcc, fps,cv::Size(get<1>(dims),get<0>(dims))); // open video writer
 
   printf("calcuating... \n");
-  A.CalculateCuda();
-  // print_arr(A.GetIterArr());
+  A.CalculateCudaGPUs();
+  A.ItersToIMG("out/frame_1_cuda.ppm"); // output of first frame
 
-  printf("saving to file!\n");
-  A.ItersToIMG();
+  cv::Mat frame;
+  for(int i=0; i<video_length*fps; i++) // write iters to video and zoom in
+  {
+    frame = A.ItersToFrame();
+    writer.write(frame);
+    A.Zoom(zoom_speed);
+    A.CalculateCudaGPUs();
+  };
+
+  writer.release();
 
   return 0;
 };
+
 
 
