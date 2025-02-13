@@ -30,7 +30,20 @@ like Mandelbrot but uses absolute values. Commonly viewed upside.
 
 
 
-# sources...
+# dependencies
+
+you likely need to run the following from the command line
+to get this make file to work...
+
+module load nvhpc/22.9
+module load cuda/11.7.1
+module load openmpi/4.0.5-nvhpc22.9
+
+
+
+
+
+# sources
 
 - for makefile
 
