@@ -3,6 +3,7 @@
 
 #include "Fractals.hpp"
 #include<math.h>
+#include<omp.h>
 
 inline void checkLastError()
 {
@@ -64,6 +65,11 @@ Fractal<F>::Fractal() //default
       val_array[i][j] = Complex(x,y);
     }
   }
+
+  num_streams=300;
+  streams_up=0;
+  num_gpus=0;
+  gpus_counted=0;
 };
 
 template<complexFunc_t F>
@@ -90,6 +96,11 @@ Fractal<F>::Fractal(Complex point1, Complex point2, tuple<int,int> dims, int num
       val_array[i][j] = Complex(x,y);
     }
   }
+
+  num_streams=300;
+  streams_up=0;
+  num_gpus=0;
+  gpus_counted=0;
 };
 
 template<complexFunc_t F>
@@ -104,8 +115,31 @@ Fractal<F>::Fractal(const Fractal &source) // copy
   // allocate memory
   val_array=source.val_array;
   iter_array=source.iter_array;
+
+  num_streams=source.num_streams;
+  streams_up=0;
+  num_gpus=0;
+  gpus_counted=0;
 };
 
+//destructors
+template<complexFunc_t F>
+Fractal<F>::~Fractal() // default
+{
+  if(gpus_counted && streams_up)
+  {
+    for(int gpu=0; gpu<num_gpus; gpu++)
+    {
+      cudaSetDevice(gpu);
+      for(int stream=0; stream<num_streams; stream++) // destroy streams
+      {
+        cudaStreamDestroy(streams_arr[gpu][stream]);
+      }
+      delete[] streams_arr[gpu];
+    }
+    delete[] streams_arr;
+  }
+}
 
 
 // setters
@@ -152,6 +186,10 @@ void Fractal<F>::CalculateCuda(bool verbose) // iterate on each matrix entry.
       val_array_h[i*nCols+j]=val_array[i][j];
     }
   }
+
+  // int num_gpus=0; // assigned in constructor
+  if(!gpus_counted){cudaGetDeviceCount(&num_gpus); gpus_counted=1;};
+  if(num_gpus==0){Fractal<F>::Calculate(verbose); return;};
 
   // device memory 
   if(verbose) cout<<"device memory"<<endl;
@@ -206,8 +244,8 @@ void Fractal<F>::CalculateCudaStreams(bool verbose) // iterate on each matrix en
     }
   }
 
-  int num_gpus = 0;
-  cudaGetDeviceCount(&num_gpus);
+  // int num_gpus=0; // assigned in constructor
+  if(!gpus_counted){cudaGetDeviceCount(&num_gpus); gpus_counted=1;};
   if(num_gpus==0){Fractal<F>::Calculate(verbose); return;};
 
   // device memory 
@@ -217,13 +255,24 @@ void Fractal<F>::CalculateCudaStreams(bool verbose) // iterate on each matrix en
   cudaMalloc(&val_array_d, num_elems*sizeof(Complex));
   cudaMalloc(&iter_array_d, num_elems*sizeof(int));
 
-  int num_streams = 20;
+  // int num_streams = 20; // assigned in constructor
   int stream_chunk_size = sdiv(num_elems,num_streams);
-
-  cudaStream_t streams_arr[num_streams];
-  for(int i=0; i<num_streams; i++) cudaStreamCreate(&streams_arr[i]);
+  if(!streams_up)
+  {
+    // allocate num_gpus many pointers to cudaStream_t
+    streams_arr = new cudaStream_t*[num_gpus];
+    for(int gpu=0; gpu<num_gpus; gpu++)
+    {
+      cudaSetDevice(gpu);
+      streams_arr[gpu] = new cudaStream_t[num_streams];     
+      for(int i=0; i<num_streams; i++) cudaStreamCreate(&streams_arr[gpu][i]);
+    }
+    streams_up=1;
+  }
+  cudaSetDevice(0); // back to first gpu
 
   if(verbose) cout << "launching copy/compute in concurrent streams" << endl;
+  #pragma omp parallel for
   for(int stream=0; stream<num_streams; stream++)
   {
     int stream_offset = stream*stream_chunk_size;
@@ -233,9 +282,9 @@ void Fractal<F>::CalculateCudaStreams(bool verbose) // iterate on each matrix en
                     val_array_h+stream_offset, 
                     stream_num_elems*sizeof(Complex),
                     cudaMemcpyHostToDevice,
-                    streams_arr[stream]);
+                    streams_arr[0][stream]);
 
-    iteration_kernel<F><<<32,256,0,streams_arr[stream]>>>(iter_array_d+stream_offset, 
+    iteration_kernel<F><<<32,256,0,streams_arr[0][stream]>>>(iter_array_d+stream_offset, 
                                              num_iters, 
                                              radius, 
                                              val_array_d+stream_offset, 
@@ -245,17 +294,17 @@ void Fractal<F>::CalculateCudaStreams(bool verbose) // iterate on each matrix en
                     val_array_d+stream_offset, 
                     stream_num_elems*sizeof(Complex), 
                     cudaMemcpyDeviceToHost,
-                    streams_arr[stream]);
+                    streams_arr[0][stream]);
 
     cudaMemcpyAsync(iter_array_h+stream_offset, 
                     iter_array_d+stream_offset, 
                     stream_num_elems*sizeof(int), 
                     cudaMemcpyDeviceToHost,
-                    streams_arr[stream]);
+                    streams_arr[0][stream]);
   }
   
   cudaDeviceSynchronize();
-  for(int i=0; i<num_streams; i++) cudaStreamDestroy(streams_arr[i]);
+  // for(int i=0; i<num_streams; i++) cudaStreamDestroy(streams_arr[i]);
 
   for(int i=0; i<nRows; i++) // copy val array into host buffer
   {
@@ -295,8 +344,8 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
     }
   }
 
-  int num_gpus = 0;
-  cudaGetDeviceCount(&num_gpus);
+  // int num_gpus=0; // assigned in constructor
+  if(!gpus_counted){cudaGetDeviceCount(&num_gpus); gpus_counted=1;};
   if(num_gpus==0){cout<<"No GPUs found."<<endl; Fractal<F>::Calculate(verbose);return;};
   if(num_gpus==1){cout<<"1 GPU found."<<endl; Fractal<F>::CalculateCudaStreams(verbose); return;};
   int gpu_chunk_size = sdiv(num_elems, num_gpus);
@@ -313,27 +362,31 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
     cudaMalloc(&iter_array_d[gpu], gpu_num_elems*sizeof(int));
   }
 
-  int num_streams = 20;
+  // int num_streams = 20; // assigned in constructor
   int stream_chunk_size = sdiv(gpu_chunk_size,num_streams);
-
-  cudaStream_t streams_arr[num_gpus][num_streams];
-
-  for(int i=0; i<num_gpus; i++) // initialize stream
+  if(!streams_up)
   {
-    cudaSetDevice(i);
-    for(int j=0; j<num_streams; j++) // init cuda streams
+    // allocate num_gpus many pointers to cudaStream_t
+    streams_arr = new cudaStream_t*[num_gpus];
+    for(int gpu=0; gpu<num_gpus; gpu++)
     {
-      cudaStreamCreate(&streams_arr[i][j]);
-    };
-  };
+      cudaSetDevice(gpu);
+      streams_arr[gpu] = new cudaStream_t[num_streams];     
+      for(int i=0; i<num_streams; i++) cudaStreamCreate(&streams_arr[gpu][i]);
+    }
+    streams_up=1;
+  }
+  cudaSetDevice(0); // back to first gpu
 
   if(verbose) cout << "launching copy/compute in concurrent streams on " << num_gpus << " GPUs." << endl;
+  #pragma omp parallel for
   for(int gpu=0; gpu<num_gpus; gpu++)
   {
     cudaSetDevice(gpu);
     int gpu_offset=gpu*gpu_chunk_size;
     int gpu_num_elems = min(gpu_chunk_size, num_elems-gpu_offset);
 
+    #pragma omp parallel for
     for(int stream=0; stream<num_streams; stream++) // copy compute overlap
     {
       int stream_offset = stream*stream_chunk_size;
@@ -372,14 +425,14 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
     cudaDeviceSynchronize();
   };
 
-  for(int i=0; i<num_gpus; i++) // destroy all streams
-  {
-    for(int j=0; j<num_streams; j++)
-    {
-      cudaSetDevice(i);
-      cudaStreamDestroy(streams_arr[i][j]);
-    }
-  }
+  // for(int i=0; i<num_gpus; i++) // destroy all streams
+  // {
+  //   for(int j=0; j<num_streams; j++)
+  //   {
+  //     cudaSetDevice(i);
+  //     cudaStreamDestroy(streams_arr[i][j]);
+  //   }
+  // }
 
   for(int i=0; i<nRows; i++) // copy val array into host buffer
   {
@@ -405,7 +458,107 @@ void Fractal<F>::CalculateCudaGPUs(bool verbose) // iterate on each matrix entry
   if(verbose) cout<<"end of function"<<endl;
   checkLastError();
   return;
+};
 
+template<complexFunc_t F>
+void Fractal<F>::CalculateCudaGPUs1Stream(bool verbose) // same as CalculateCudaGPUs, but no copy/compute overlap.
+{
+  // host memory 
+  int num_elems = nRows*nCols;
+  if(verbose) cout<<"host memory"<<endl;
+  Complex* val_array_h;
+  int* iter_array_h;
+  cudaMallocHost(&val_array_h, num_elems*sizeof(Complex));
+  cudaMallocHost(&iter_array_h, num_elems*sizeof(int));
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array_h[i*nCols+j]=val_array[i][j];
+    }
+  }
+
+  // int num_gpus=0; // assigned in constructor
+  if(!gpus_counted){cudaGetDeviceCount(&num_gpus); gpus_counted=1;};
+  if(num_gpus==0){cout<<"No GPUs found."<<endl; Fractal<F>::Calculate(verbose);return;};
+  if(num_gpus==1){cout<<"1 GPU found."<<endl; Fractal<F>::CalculateCudaStreams(verbose); return;};
+  int gpu_chunk_size = sdiv(num_elems, num_gpus);
+
+  // device memory 
+  if(verbose) cout<<"device memory"<<endl;
+  Complex* val_array_d[num_gpus];
+  int* iter_array_d[num_gpus];
+  #pragma omp parallel for
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaSetDevice(gpu);
+    int gpu_num_elems = min(gpu_chunk_size, num_elems-gpu*gpu_chunk_size);
+    cudaMalloc(&val_array_d[gpu], gpu_num_elems*sizeof(Complex));
+    cudaMalloc(&iter_array_d[gpu], gpu_num_elems*sizeof(int));
+  }
+
+  if(verbose) cout << "launching kernel on " << num_gpus << " GPUs." << endl;
+  #pragma omp parallel for
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaSetDevice(gpu);
+    int gpu_offset=gpu*gpu_chunk_size;
+    int gpu_num_elems = min(gpu_chunk_size, num_elems-gpu_offset);
+
+    // copy compute copy back in stream
+    cudaMemcpy(val_array_d[gpu],
+                    val_array_h+gpu_offset, 
+                    gpu_num_elems*sizeof(Complex),
+                    cudaMemcpyHostToDevice);
+  
+    iteration_kernel<F><<<32,256>>>(iter_array_d[gpu], 
+                                            num_iters, 
+                                            radius, 
+                                            val_array_d[gpu], 
+                                            gpu_num_elems);
+    checkLastError();
+  
+    cudaMemcpyAsync(val_array_h+gpu_offset, 
+                    val_array_d[gpu], 
+                    gpu_num_elems*sizeof(Complex), 
+                    cudaMemcpyDeviceToHost);
+      
+    cudaMemcpyAsync(iter_array_h+gpu_offset, 
+                    iter_array_d[gpu], 
+                    gpu_num_elems*sizeof(int), 
+                    cudaMemcpyDeviceToHost);
+    checkLastError();
+  }
+  for(int gpu=0; gpu<num_gpus; gpu++) // synchronize all gpus
+  {
+    cudaSetDevice(gpu);
+    cudaDeviceSynchronize();
+  };
+
+  for(int i=0; i<nRows; i++) // copy val array into host buffer
+  {
+    for(int j=0; j<nCols; j++)
+    {
+      val_array[i][j] = val_array_h[i*nCols+j];
+      iter_array[i][j] = iter_array_h[i*nCols+j];
+    }
+  }
+
+  // free memory
+  if(verbose) cout<<"freeing memory"<<endl;
+  cudaFreeHost(val_array_h);
+  cudaFreeHost(iter_array_h);
+  for(int gpu=0; gpu<num_gpus; gpu++)
+  {
+    cudaSetDevice(gpu);
+    cudaFree(val_array_d[gpu]);
+    cudaFree(iter_array_d[gpu]);
+  }
+  
+  // end of function
+  if(verbose) cout<<"end of function"<<endl;
+  checkLastError();
+  return;
 };
 
 template<complexFunc_t F>

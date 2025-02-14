@@ -56,7 +56,10 @@ int main(int argc, char** argv)
   }
   
   printf("calcuating... \n");
-  A.CalculateCudaGPUs();
+  A.CalculateCuda(); // single kernel
+  // A.CalculateCudaStreams(); // multiple kernel copy/compute in concurrent streams
+  // A.CalculateCudaGPUs(); // concurrent streams in muliplt GPUs
+  // A.CalculateCudaGPUs1Stream(); // concurrent streams in muliplt GPUs
   A.ItersToIMG("out/frame_1_cuda.ppm"); // output of first frame
 
   cv::Mat frame;
@@ -65,7 +68,10 @@ int main(int argc, char** argv)
     frame = A.ItersToFrame();
     writer.write(frame);
     A.Zoom(zoom_speed);
-    A.CalculateCudaGPUs();
+    A.CalculateCuda();
+    // A.CalculateCudaStreams();
+    // A.CalculateCudaGPUs();
+    // A.CalculateCudaGPUs1Stream();
   };
 
   writer.release();

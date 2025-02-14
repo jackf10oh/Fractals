@@ -60,6 +60,13 @@ class Fractal
     vector<vector<Complex>> val_array; 
     // counts how many iterations for a point to explode. 0 means stable.
     vector<vector<int>> iter_array; 
+    // number of cuda streams to use in concurrent stream funcs
+    int num_streams;
+    cudaStream_t** streams_arr; // array of streams [num_gpus][num_streams]
+    bool streams_up; // are streams up?
+    // number of gpus available for cuda
+    int num_gpus;
+    bool gpus_counted;
 
   public:
     //constructors
@@ -68,7 +75,7 @@ class Fractal
     Fractal(const Fractal &source); // copy 
 
     //destructors
-    virtual ~Fractal(){}; // default
+    virtual ~Fractal(); // default
 
     //setters
     void SetIterArr(vector<vector<int>> source_array); // set iter_array from another array
@@ -76,6 +83,7 @@ class Fractal
     void CalculateCuda(bool verbose=0); // same as calculate. uses cuda
     void CalculateCudaStreams(bool verbose=0); // same as CalculateCude, but uses streams for copy/compute overlap.
     void CalculateCudaGPUs(bool verbose=0); // same as CalculateCudaStreams, but use all GPUs available.
+    void CalculateCudaGPUs1Stream(bool verbose=0); // same as CalculateCudaGPUs, but no copy/compute overlap.
     void Center(Complex p1); // move the mandelbrot set to be centered over a point p1
     void Zoom(double scale=0.95); // reset the coors (x1,y1), (x2,y2) to be smaller box around center
 

@@ -19,7 +19,7 @@ CUDA_ROOT_DIR=opt/packages/cuda/v11.7.1
 ## NVCC COMPILER OPTIONS ##
 
 NVCC=nvcc
-NVCC_FLAGS= 
+NVCC_FLAGS=
 NVCC_LIBS= -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio -lcudart 
 # -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio
 
@@ -34,14 +34,14 @@ CUDA_LINK_LIBS= -lcudart
 
 ## NVCXX COMPILER OPTIONS:
 NVCXX=nvc++
-NVCXX_FLAGS =
+NVCXX_FLAGS = -mp
 NVCXX_LIBS = $(CUDA_LIB_DIR) -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio $(CUDA_LINK_LIBS)
 
 ##########################################################
 
 ## NVCXX COMPILER OPTIONS:
 MPICXX=mpic++
-MPICXX_FLAGS =
+MPICXX_FLAGS = -mp
 MPICXX_LIBS = $(CUDA_LIB_DIR) -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_videoio $(CUDA_LINK_LIBS)
 
 ##########################################################
@@ -95,23 +95,23 @@ all: $(OBJ_DIR) $(BIN_DIR) $(OBJS) $(EXE)
 
 # MPI Link .o files to executable
 $(BIN_DIR)/frac_mpi : $(OBJ_DIR)/frac_mpi.o $(OBJ_DIR)/Fractals.o
-	$(MPICXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda $< 
+	$(MPICXX) $(MPICXX_FLAGS) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda $< 
 
 # Link .o files to executable
 $(BIN_DIR)/% : $(OBJ_DIR)/%.o $(OBJ_DIR)/Fractals.o
-	$(NVCXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda $< 
+	$(NVCXX) $(NVCXX_FLAGS) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda $< 
 
 # MPI Compile C++ source files to object files:
 $(OBJ_DIR)/frac_mpi.o : $(SRC_DIR)/frac_mpi.cpp $(INC_DIR)/Fractals.hpp
-	$(MPICXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda -c $< 
+	$(MPICXX) $(MPICXX_FLAGS) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(MPICXX_LIBS) -cuda -c $< 
 
 # Compile C++ source files to object files:
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.cpp $(INC_DIR)/Fractals.hpp
-	$(NVCXX) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda -c $< 
+	$(NVCXX) $(NVCXX_FLAGS) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(CUDA_INC_DIR) $(NVCXX_LIBS) -cuda -c $< 
 
 # Compile .cu to .o using NVCC
 $(OBJ_DIR)/Fractals.o: $(SRC_DIR)/Fractals.cu $(INC_DIR)/Fractals.hpp
-	$(NVCC) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(NVCC_LIBS) -c $<
+	$(NVCC) $(NVCC_FLAGS) -o $@ -I$(INC_DIR) -I$(SRC_DIR) $(NVCC_LIBS) -c $<
 
 submit_gpu_job:
 	@echo "Submitting a gpu job using sbatch..."
